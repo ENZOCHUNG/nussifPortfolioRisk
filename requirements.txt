@@ -1,0 +1,8 @@
+streamlit
+pandas
+numpy
+plotly
+ib-insync
+pyarrow
+fastparquet
+typing-extensions
