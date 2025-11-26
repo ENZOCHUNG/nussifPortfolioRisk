@@ -3,7 +3,6 @@ import pandas as pd, numpy as np
 from typing import Optional, Dict, Tuple
 from ib_insync import IB, util
 import math
-import numpy as np
 import plotly.graph_objects as go
 import datetime
 import os
@@ -11,7 +10,7 @@ import os
 # ======== Connection to TWS ========
 util.startLoop()
 ib = IB()
-ib.connect('127.0.0.1', 4002, clientId=1)
+ib.connect('127.0.0.1', 7497, clientId=1)
 ib.reqMarketDataType(3)  # delayed ok
 
 BASE_CCY = 'SGD'
@@ -677,7 +676,8 @@ print("historical 5dEs90:", hisEs90_5d)
 print("historical 21dEs90:", hisEs90_21d)
 
 # Example: today's values
-today = datetime.date.today()
+raw_dt = datetime.datetime.now()
+today = pd.Timestamp(raw_dt).round('h')
 
 # Put into a 1-row DataFrame
 new_row = pd.DataFrame([{
@@ -777,8 +777,6 @@ avg_store = avg_store.sort_values("date").reset_index(drop=True)
 # Save back
 avg_store.to_parquet(parquet_file, index=False)
 
-today = datetime.date.today()
-
 # Add a date column to weights (convert Series → DataFrame)
 weights_df = weights.to_frame("weights").reset_index().rename(columns={"index": "symbol"})
 weights_df["date"] = today
@@ -790,8 +788,6 @@ if os.path.exists(weights_file):
     weights_df = pd.concat([old, weights_df], ignore_index=True)
 
 weights_df.to_parquet(weights_file, index=False)
-
-today = datetime.date.today()
 
 # Compute volatility (std dev of returns)
 vol_std = rets.std()
