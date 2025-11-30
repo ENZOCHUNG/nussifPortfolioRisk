@@ -9,7 +9,7 @@ st.set_page_config(layout="wide")
 # ==============================
 # Load data
 # ==============================
-risk_df = pd.read_parquet("global_avg_metric.parquet")
+risk_df = pd.read_parquet("global_avg_metricV2.parquet")
 
 # ==============================
 # Sidebar controls
@@ -80,8 +80,8 @@ elif view_option == "Weights vs Volatility":
     st.title("Portfolio Weights vs Volatility")
 
     # Load weights & vol data
-    weights_df = pd.read_parquet("weights.parquet")
-    vol_df = pd.read_parquet("vol.parquet")
+    weights_df = pd.read_parquet("weightsV2.parquet")
+    vol_df = pd.read_parquet("volV2.parquet")
 
     # Merge on symbol + date
     merged_df = pd.merge(weights_df, vol_df, on=["symbol", "date"], how="inner")
@@ -150,19 +150,19 @@ elif view_option == "Weights vs Volatility":
 elif view_option == "Corr":
     st.title("Correlation Matrix")
 
-    today = dt.date.today().strftime("%Y-%m-%d")
+    raw_dt = dt.datetime.now()
+    today = pd.Timestamp(raw_dt).round('h')
 
-    corr_file = "corr.parquet"
+    corr_file = "corrV2.parquet"
     df_corr = pd.read_parquet(corr_file)
 
     # Normalize date format
-    df_corr["date"] = pd.to_datetime(df_corr["date"]).dt.strftime("%Y-%m-%d")
-    df_today = df_corr[df_corr["date"] == today]
+    df_corr["date"] = pd.to_datetime(df_corr["date"])
 
-    if df_today.empty:
+    if df_corr.empty:
         st.error(f"No correlation data found for {today}")
     else:
-        corr_matrix = df_today.pivot(index="asset1", columns="asset2", values="corr")
+        corr_matrix = df_corr.pivot(index="asset1", columns="asset2", values="corr")
 
         fig_corr = px.imshow(
             corr_matrix,

@@ -746,7 +746,7 @@ avg_df = pd.DataFrame([avg_dict])
 print("\n=== Averages DataFrame ===")
 print(avg_df)
 
-parquet_file = "global_avg_metric.parquet"
+parquet_file = "global_avg_metricV2.parquet"
 
 # If parquet file exists → load it, else create a new DataFrame
 if os.path.exists(parquet_file):
@@ -782,7 +782,7 @@ weights_df = weights.to_frame("weights").reset_index().rename(columns={"index": 
 weights_df["date"] = today
 
 # If file exists, append; else create new
-weights_file = "weights.parquet"
+weights_file = "weightsV2.parquet"
 if os.path.exists(weights_file):
     old = pd.read_parquet(weights_file)
     weights_df = pd.concat([old, weights_df], ignore_index=True)
@@ -797,7 +797,7 @@ vol_df = vol_std.to_frame("volatility").reset_index().rename(columns={"index": "
 vol_df["date"] = today
 
 # File path
-vol_file = "vol.parquet"
+vol_file = "volV2.parquet"
 
 # Append if file exists
 if os.path.exists(vol_file):
@@ -808,9 +808,9 @@ if os.path.exists(vol_file):
 vol_df.to_parquet(vol_file, index=False)
 
 # ======= Correlation Matrix ===========
-corr_file = "corr.parquet"
+corr_file = "corrv2.parquet"
 
-def save_correlation(rets, today, corr_file="corr.parquet", patterns=("CCY_", "CASH_")):
+def save_correlation(rets, today, corr_file="corrV2.parquet", patterns=("CCY_", "CASH_")):
     """
     Compute correlation matrix (excluding currencies), flatten it,
     and store in a parquet file with date reference.
@@ -826,17 +826,7 @@ def save_correlation(rets, today, corr_file="corr.parquet", patterns=("CCY_", "C
     # Flatten to long format
     corr_long = corr_no_fx.stack().reset_index()
     corr_long.columns = ["asset1", "asset2", "corr"]
-    corr_long["date"] = pd.to_datetime(today).normalize()
-
-    if os.path.exists(corr_file):
-        old = pd.read_parquet(corr_file)
-        old["date"] = pd.to_datetime(old["date"]).dt.normalize()
-
-        # Remove existing rows for today's date
-        old = old[old["date"] != corr_long["date"].iloc[0]]
-
-        # Append new rows
-        corr_long = pd.concat([old, corr_long], ignore_index=True)
+    corr_long["date"] = today
 
     # Save back
     corr_long.to_parquet(corr_file, index=False)
