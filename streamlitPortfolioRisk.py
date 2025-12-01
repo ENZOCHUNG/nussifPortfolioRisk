@@ -9,7 +9,7 @@ st.set_page_config(layout="wide")
 # ==============================
 # Load data
 # ==============================
-risk_df = pd.read_parquet("global_avg_metricV2.parquet")
+risk_df = pd.read_parquet("global_avg_metric.parquet")
 
 # ==============================
 # Sidebar controls
@@ -80,8 +80,8 @@ elif view_option == "Weights vs Volatility":
     st.title("Portfolio Weights vs Volatility")
 
     # Load weights & vol data
-    weights_df = pd.read_parquet("weightsV2.parquet")
-    vol_df = pd.read_parquet("volV2.parquet")
+    weights_df = pd.read_parquet("weights.parquet")
+    vol_df = pd.read_parquet("vol.parquet")
 
     # Merge on symbol + date
     merged_df = pd.merge(weights_df, vol_df, on=["symbol", "date"], how="inner")
@@ -153,7 +153,7 @@ elif view_option == "Corr":
     raw_dt = dt.datetime.now()
     today = pd.Timestamp(raw_dt).round('h')
 
-    corr_file = "corrV2.parquet"
+    corr_file = "corr.parquet"
     df_corr = pd.read_parquet(corr_file)
 
     # Normalize date format

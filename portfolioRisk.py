@@ -6,6 +6,7 @@ import math
 import plotly.graph_objects as go
 import datetime
 import os
+import pytz
 
 # ======== Connection to TWS ========
 util.startLoop()
@@ -676,8 +677,9 @@ print("historical 5dEs90:", hisEs90_5d)
 print("historical 21dEs90:", hisEs90_21d)
 
 # Example: today's values
-raw_dt = datetime.datetime.now()
-today = pd.Timestamp(raw_dt).round('h')
+singapore_tz = pytz.timezone('Asia/Singapore')
+raw_dt_utc = datetime.datetime.now(datetime.timezone.utc)
+today = pd.Timestamp(raw_dt_utc).tz_convert(singapore_tz).round('h')
 
 # Put into a 1-row DataFrame
 new_row = pd.DataFrame([{
@@ -746,7 +748,7 @@ avg_df = pd.DataFrame([avg_dict])
 print("\n=== Averages DataFrame ===")
 print(avg_df)
 
-parquet_file = "global_avg_metricV2.parquet"
+parquet_file = "global_avg_metric.parquet"
 
 # If parquet file exists → load it, else create a new DataFrame
 if os.path.exists(parquet_file):
@@ -782,7 +784,7 @@ weights_df = weights.to_frame("weights").reset_index().rename(columns={"index": 
 weights_df["date"] = today
 
 # If file exists, append; else create new
-weights_file = "weightsV2.parquet"
+weights_file = "weights.parquet"
 if os.path.exists(weights_file):
     old = pd.read_parquet(weights_file)
     weights_df = pd.concat([old, weights_df], ignore_index=True)
@@ -797,7 +799,7 @@ vol_df = vol_std.to_frame("volatility").reset_index().rename(columns={"index": "
 vol_df["date"] = today
 
 # File path
-vol_file = "volV2.parquet"
+vol_file = "vol.parquet"
 
 # Append if file exists
 if os.path.exists(vol_file):
@@ -808,7 +810,7 @@ if os.path.exists(vol_file):
 vol_df.to_parquet(vol_file, index=False)
 
 # ======= Correlation Matrix ===========
-corr_file = "corrv2.parquet"
+corr_file = "corr.parquet"
 
 def save_correlation(rets, today, corr_file="corrV2.parquet", patterns=("CCY_", "CASH_")):
     """
