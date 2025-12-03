@@ -812,7 +812,7 @@ vol_df.to_parquet(vol_file, index=False)
 # ======= Correlation Matrix ===========
 corr_file = "corr.parquet"
 
-def save_correlation(rets, today, corr_file="corrV2.parquet", patterns=("CCY_", "CASH_")):
+def save_correlation(rets, today, corr_file="corr.parquet", patterns=("CCY_", "CASH_")):
     """
     Compute correlation matrix (excluding currencies), flatten it,
     and store in a parquet file with date reference.
