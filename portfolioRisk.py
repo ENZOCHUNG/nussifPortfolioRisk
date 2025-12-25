@@ -451,7 +451,7 @@ for ccy, units in currency_legs_units.items():
     asset_qty[name] = float(units)
     asset_ccy[name] = BASE_CCY
 
-# ======== NAV retrieval ========
+# ======== NAV retrieval and update to nav.parquet ========
 df_vals = util.df(av)
 nav_sgd = df_vals[df_vals.tag == 'NetLiquidation']['value'].astype(float).sum()
 if not np.isfinite(nav_sgd) or abs(nav_sgd) < 1e-6:
@@ -461,6 +461,32 @@ if not np.isfinite(nav_sgd) or abs(nav_sgd) < 1e-6:
         nav_sgd = float(sum_df.loc[sum_df.tag == 'NetLiquidation', 'value'].iloc[0])
     else:
         raise RuntimeError("Could not retrieve NAV from IBKR.")
+
+singapore_tz = pytz.timezone('Asia/Singapore')
+raw_dt_utc = datetime.datetime.now(datetime.timezone.utc)
+today = pd.Timestamp(raw_dt_utc).tz_convert(singapore_tz).round('h')
+
+new_data = {
+    "date": [today],
+    "nav": [nav_sgd]
+}
+
+new_nav_df = pd.DataFrame(new_data)
+
+# File path
+nav_file = "nav.parquet"
+
+# Append if file exists
+if os.path.exists(nav_file):
+    # Load historical data
+    old_df = pd.read_parquet(nav_file)
+    # Concatenate the existing data with the new observation
+    updated_df = pd.concat([old_df, new_nav_df], ignore_index=True)
+else:
+    # If no file exists, this new DF becomes the starting point
+    updated_df = new_nav_df
+    
+updated_df.to_parquet(nav_file, index=False)
 
 # ======== Residual CASH_SGD so ΣMV == NAV ========
 _union_index = sorted(set().union(*[s.index for s in asset_prices_sgd.values()])) or pd.date_range(end=pd.Timestamp.today().normalize(), periods=2, freq='D')
@@ -675,11 +701,6 @@ print("historical 21dVar90:", hisVar90_21d)
 print("historical 1dEs90:", hisEs90_1d)
 print("historical 5dEs90:", hisEs90_5d)
 print("historical 21dEs90:", hisEs90_21d)
-
-# Example: today's values
-singapore_tz = pytz.timezone('Asia/Singapore')
-raw_dt_utc = datetime.datetime.now(datetime.timezone.utc)
-today = pd.Timestamp(raw_dt_utc).tz_convert(singapore_tz).round('h')
 
 # Put into a 1-row DataFrame
 new_row = pd.DataFrame([{
