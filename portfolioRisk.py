@@ -454,8 +454,9 @@ for ccy, units in currency_legs_units.items():
 # ======== NAV retrieval and update to nav.parquet ========
 df_vals = util.df(av)
 nav_sgd = df_vals[df_vals.tag == 'NetLiquidation']['value'].astype(float).sum()
+account = ib.managedAccounts()[0]
+
 if not np.isfinite(nav_sgd) or abs(nav_sgd) < 1e-6:
-    account = ib.managedAccounts()[0]
     sum_df = util.df(ib.accountSummary(account))
     if (sum_df.tag == 'NetLiquidation').any():
         nav_sgd = float(sum_df.loc[sum_df.tag == 'NetLiquidation', 'value'].iloc[0])
