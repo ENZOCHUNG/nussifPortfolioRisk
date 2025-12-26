@@ -462,13 +462,18 @@ if not np.isfinite(nav_sgd) or abs(nav_sgd) < 1e-6:
     else:
         raise RuntimeError("Could not retrieve NAV from IBKR.")
 
+# Get unrealised
+pnl_stream = ib.reqPnL(account)
+current_unrealised = pnl_stream.unrealizedPnL
+
 singapore_tz = pytz.timezone('Asia/Singapore')
 raw_dt_utc = datetime.datetime.now(datetime.timezone.utc)
 today = pd.Timestamp(raw_dt_utc).tz_convert(singapore_tz).round('h')
 
 new_data = {
     "date": [today],
-    "nav": [nav_sgd]
+    "nav": [nav_sgd],
+    "unrealised": [current_unrealised]
 }
 
 new_nav_df = pd.DataFrame(new_data)
