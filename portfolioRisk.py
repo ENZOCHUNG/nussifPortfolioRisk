@@ -11,7 +11,7 @@ import pytz
 # ======== Connection to TWS ========
 util.startLoop()
 ib = IB()
-ib.connect('127.0.0.1', 4002, clientId=1)
+ib.connect('127.0.0.1', 4002, clientId=3)
 ib.reqMarketDataType(3)  # delayed ok
 
 BASE_CCY = 'SGD'
@@ -465,7 +465,13 @@ if not np.isfinite(nav_sgd) or abs(nav_sgd) < 1e-6:
 
 # Get unrealised
 pnl_stream = ib.reqPnL(account)
+ib.sleep(10) # let updates come in (event loop processes messages)
 current_unrealised = pnl_stream.unrealizedPnL
+
+print("")
+print(account)
+print(current_unrealised)
+print("")
 
 singapore_tz = pytz.timezone('Asia/Singapore')
 raw_dt_utc = datetime.datetime.now(datetime.timezone.utc)
