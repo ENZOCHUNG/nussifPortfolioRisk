@@ -21,7 +21,8 @@ view_map = {
     "Value at Risk": "Var",
     "Expected Shortfall": "Es",
     "Weight & Volatility": "Weights vs Volatility",
-    "Correlation Matrix": "Corr"
+    "Correlation Matrix": "Corr",
+    "Profit & Loss" : "PnL"
 }
 
 view_option_label = st.sidebar.radio(
@@ -181,3 +182,124 @@ elif view_option == "Corr":
         )
 
         st.plotly_chart(fig_corr, use_container_width=True)
+
+# ==============================
+# Section 4: PnL Section
+# ==============================
+elif view_option == "PnL":
+    st.title("Portfolio Performance & PnL Attribution")
+
+    # --- KPI Summary Row ---
+    try:
+        df_pnl = pd.read_parquet("pnl.parquet")
+        df_pnl["date"] = pd.to_datetime(df_pnl["date"])
+        # Sort by date to ensure lines connect correctly
+        df_pnl = df_pnl.sort_values("date")
+    except FileNotFoundError:
+        st.error("pnl.parquet not found. Please run your processor script first.")
+        st.stop()
+    
+    latest = df_pnl.iloc[-1]
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Current NAV", f"${latest['nav']:,.2f}")
+    c2.metric("Total PnL", f"${latest['totalPnL']:,.2f}")
+    c3.metric("Realised", f"${latest['realisedPnL']:,.2f}")
+    c4.metric("Return", f"{latest['percentage_change']}%")
+    # Load PnL data
+    # Path handles the directory structure we discussed (../app/pnl.parquet)
+    try:
+        df_pnl = pd.read_parquet("pnl.parquet")
+        df_pnl["date"] = pd.to_datetime(df_pnl["date"])
+        # Sort by date to ensure lines connect correctly
+        df_pnl = df_pnl.sort_values("date")
+    except FileNotFoundError:
+        st.error("pnl.parquet not found. Please run your processor script first.")
+        st.stop()
+
+    # --- Chart 1: NAV Against Time ---
+    st.subheader("1. Net Asset Value (Equity Curve)")
+    fig_nav = px.line(
+        df_pnl, 
+        x="date", 
+        y="nav", 
+        title="Total Portfolio Value (SGD)",
+        markers=True,
+        line_shape="linear"
+    )
+    fig_nav.update_layout(yaxis_title="NAV (SGD)", height=400)
+    # Don't start Y-axis at 0 to see the hourly movements clearly
+    fig_nav.update_yaxes(autorange=True, fixedrange=False)
+    st.plotly_chart(fig_nav, use_container_width=True)
+
+    # --- Chart 2: PnL Attribution (Stacked Area) ---
+    st.subheader("2. PnL Attribution: Realised vs Unrealised")
+    
+    fig_attrib = go.Figure()
+
+    # Realised PnL Area
+    fig_attrib.add_trace(go.Scatter(
+        x=df_pnl["date"], 
+        y=df_pnl["realisedPnL"],
+        mode='lines',
+        name='Realised PnL',
+        stackgroup='one', # Groups the areas
+        fillcolor='rgba(26, 150, 65, 0.5)', # Greenish
+        line=dict(width=0.5, color='rgb(26, 150, 65)')
+    ))
+
+    # Unrealised PnL Area
+    fig_attrib.add_trace(go.Scatter(
+        x=df_pnl["date"], 
+        y=df_pnl["unrealisedPnL"],
+        mode='lines',
+        name='Unrealised PnL',
+        stackgroup='one',
+        fillcolor='rgba(0, 176, 246, 0.5)', # Bluish
+        line=dict(width=0.5, color='rgb(0, 176, 246)')
+    ))
+
+    # Total PnL Line (The sum of the above)
+    fig_attrib.add_trace(go.Scatter(
+        x=df_pnl["date"], 
+        y=df_pnl["totalPnL"],
+        mode='lines+markers',
+        name='Total PnL',
+        line=dict(color='black', width=3, dash='dot')
+    ))
+
+    fig_attrib.update_layout(
+        title="Total PnL Composition",
+        xaxis_title="Date",
+        yaxis_title="PnL (SGD)",
+        hovermode="x unified",
+        height=500
+    )
+    st.plotly_chart(fig_attrib, use_container_width=True)
+
+# --- Chart 3: Cumulative Percentage Return ---
+    st.subheader("3. Overall Portfolio Return (%)")
+    
+    # Using a line chart because this is a cumulative metric (Total Return)
+    fig_pct = px.line(
+        df_pnl,
+        x="date",
+        y="percentage_change",
+        title="Cumulative Return Since Inception",
+        markers=True,
+        line_shape="linear"
+    )
+    
+    # Professional touch: Add a horizontal line at 0.0 to clearly show profit vs loss
+    fig_pct.add_hline(y=0.0, line_dash="dash", line_color="gray", annotation_text="Inception")
+
+    fig_pct.update_layout(
+        xaxis_title="Date",
+        yaxis_title="Total Return (%)",
+        yaxis_ticksuffix="%",
+        height=400
+    )
+    
+    # Improve the tooltip to show the exact percentage
+    fig_pct.update_traces(hovertemplate="Date: %{x}<br>Total Return: %{y}%")
+    
+    st.plotly_chart(fig_pct, use_container_width=True)
