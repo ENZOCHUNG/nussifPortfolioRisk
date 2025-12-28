@@ -277,7 +277,7 @@ elif view_option == "PnL":
     )
     st.plotly_chart(fig_attrib, use_container_width=True)
 
-# --- Chart 3: Cumulative Percentage Return ---
+    # --- Chart 3: Cumulative Percentage Return ---
     st.subheader("3. Overall Portfolio Return (%)")
     
     # Using a line chart because this is a cumulative metric (Total Return)
