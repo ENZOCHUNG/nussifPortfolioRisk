@@ -23,7 +23,7 @@ view_map = {
     "Expected Shortfall": "Es",
     "Weight & Volatility": "Weights vs Volatility",
     "Correlation Matrix": "Corr",
-    "Profit & Loss" : "PnL"
+    "Portfolio Performance" : "PnL"
 }
 
 view_option_label = st.sidebar.radio(
