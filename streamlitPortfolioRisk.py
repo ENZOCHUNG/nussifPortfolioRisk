@@ -23,7 +23,7 @@ view_map = {
     "Expected Shortfall": "Es",
     "Weight & Volatility": "Weights vs Volatility",
     "Correlation Matrix": "Corr",
-    "Portfolio Performance" : "PnL"
+    "Profit & Loss" : "PnL"
 }
 
 view_option_label = st.sidebar.radio(
@@ -66,13 +66,29 @@ if view_option in ["Var", "Es"]:
         markers=True,
         title=f"Average {view_option_label} {confidence}% across horizons"
     )
+
     fig_risk.update_layout(
         xaxis_title="Date",
         yaxis_title="SGD",
         legend_title="Horizon",
         height=600,
-        width=900
+        width=900,
+        xaxis=dict(
+            rangeselector=dict(
+                buttons=list([
+                    dict(count=7, label="1W", step="day", stepmode="backward"),
+                    dict(count=1, label="1M", step="month", stepmode="backward"),
+                    dict(count=3, label="3M", step="month", stepmode="backward"),
+                    dict(step="all", label="All")
+                ]),
+                # Styling for the buttons
+                bgcolor="rgba(150, 200, 250, 0.4)",
+                activecolor="rgba(100, 150, 250, 1)",
+            ),
+            type="date"
+        )
     )
+
     st.plotly_chart(fig_risk, use_container_width=True)
 
 # ==============================
@@ -84,6 +100,8 @@ elif view_option == "Weights vs Volatility":
     # Load weights & vol data
     weights_df = pd.read_parquet("weights.parquet")
     vol_df = pd.read_parquet("vol.parquet")
+
+    vol_df["volatility"] = vol_df["volatility"] * 100
 
     # Merge on symbol + date
     merged_df = pd.merge(weights_df, vol_df, on=["symbol", "date"], how="inner")
@@ -115,18 +133,19 @@ elif view_option == "Weights vs Volatility":
             text="weights"
         )
         fig_currencies.update_traces(
-            texttemplate='%{y:.2%}',  # show as %
+            texttemplate='%{y:.2%}',  
             textposition="outside"
         )
         fig_currencies.update_layout(
             yaxis_tickformat=".0%",
             yaxis_title="Portfolio Weight",
-            height=500
+            height=500,
+            coloraxis_colorbar=dict(ticksuffix="%") 
         )
         st.plotly_chart(fig_currencies, use_container_width=True)
 
     with col2:
-        st.subheader("Stocks / ETFs")
+        st.subheader("Stocks / ETF / CMDTY")
         fig_stocks = px.bar(
             df_stocks,
             x="symbol",
@@ -142,7 +161,8 @@ elif view_option == "Weights vs Volatility":
         fig_stocks.update_layout(
             yaxis_tickformat=".0%",
             yaxis_title="Portfolio Weight",
-            height=500
+            height=500,
+            coloraxis_colorbar=dict(ticksuffix="%")
         )
         st.plotly_chart(fig_stocks, use_container_width=True)
 
@@ -277,7 +297,7 @@ elif view_option == "PnL":
     )
     st.plotly_chart(fig_attrib, use_container_width=True)
 
-    # --- Chart 3: Cumulative Percentage Return ---
+# --- Chart 3: Cumulative Percentage Return ---
     st.subheader("3. Overall Portfolio Return (%)")
     
     # Using a line chart because this is a cumulative metric (Total Return)
