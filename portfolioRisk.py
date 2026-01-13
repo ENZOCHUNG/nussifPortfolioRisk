@@ -11,7 +11,7 @@ import pytz
 # ======== Connection to TWS ========
 util.startLoop()
 ib = IB()
-ib.connect('127.0.0.1', 4002, clientId=3)
+ib.connect('127.0.0.1', 4002, clientId=4)
 ib.reqMarketDataType(3)  # delayed ok
 
 BASE_CCY = 'SGD'
@@ -99,16 +99,7 @@ def get_equity_series(qc: Contract, dur=LOOKBACK, bar=BAR, whatToShow='TRADES') 
         formatDate=1
     )
     return _bars_to_series(bars)
-'''
-def get_equity_last_close_local(qc: Contract) -> Tuple[Optional[float], str]:
-    bars = ib.reqHistoricalData(qc, endDateTime='', durationStr='5 D',
-                                barSizeSetting='1 day', whatToShow='TRADES',
-                                useRTH=False, formatDate=1)
-    if not bars:
-        return None, "N/A"
-    df = util.df(bars)
-    return float(df.iloc[-1]['close']), "HMDS:1day TRADES"
-'''
+
 def get_equity_last_close_local(qc: Contract) -> Tuple[Optional[float], str]:
     # Determine the correct data type to show
     # Commodities (CMDTY) usually require MIDPOINT or BID_ASK
@@ -134,7 +125,7 @@ def get_equity_last_close_local(qc: Contract) -> Tuple[Optional[float], str]:
     except Exception as e:
         print(f"Error fetching data for {qc.symbol}: {e}")
         return None, "Error"
-    
+
 def normalize_contract_from_position(p: Position) -> Optional[Contract]:
     c = p.contract
     sec = (getattr(c, 'secType', '') or '').upper()
@@ -269,32 +260,15 @@ asset_ccy: Dict[str, str] = {}
 # ---- Equities / ETFs → price in SGD
 for p in positions:
     sec = (getattr(p.contract, 'secType', '') or '').upper()
-    if sec not in ('STK', 'ETF', 'CMDTY'):
+    if sec not in ('STK', 'ETF'):
         continue
-    
     base = normalize_contract_from_position(p)
     qc   = qualify_safe(base)
-    if sec == 'CMDTY':
-            # Fetch midpoint prices for XAU/XAG to avoid the Error 162/165 (No Trades)
-            s_loc = get_equity_series(qc, whatToShow='MIDPOINT') 
-            
-            # Fallback: If historical series fails, try to get the current live price
-            if s_loc is None:
-                ticker = ib.ticker(qc)
-                ib.sleep(0.1)
-                live_px = ticker.marketPrice()
-                if live_px and not np.isnan(live_px):
-                    # Create a minimal series with today's date if history fails
-                    s_loc = pd.Series([live_px], index=[pd.Timestamp.today().normalize()])
-    else:
-        s_loc = get_equity_series(qc) # Standard STK/ETF logic
-    # --- MODIFIED LOGIC END ---
+    s_loc = get_equity_series(qc)
     if s_loc is None:
-            continue
-
+        continue
     sym = p.contract.symbol
     ccy = getattr(qc, 'currency', 'USD')
-
     if ccy == BASE_CCY:
         fx_ccy_sgd = pd.Series(1.0, index=s_loc.index)
     else:
@@ -503,16 +477,54 @@ for ccy, units in currency_legs_units.items():
     asset_qty[name] = float(units)
     asset_ccy[name] = BASE_CCY
 
-# ======== NAV retrieval ========
+# ======== NAV retrieval and update to nav.parquet ========
 df_vals = util.df(av)
 nav_sgd = df_vals[df_vals.tag == 'NetLiquidation']['value'].astype(float).sum()
+account = ib.managedAccounts()[0]
+
 if not np.isfinite(nav_sgd) or abs(nav_sgd) < 1e-6:
-    account = ib.managedAccounts()[0]
     sum_df = util.df(ib.accountSummary(account))
     if (sum_df.tag == 'NetLiquidation').any():
         nav_sgd = float(sum_df.loc[sum_df.tag == 'NetLiquidation', 'value'].iloc[0])
     else:
         raise RuntimeError("Could not retrieve NAV from IBKR.")
+
+# Get unrealised
+pnl_stream = ib.reqPnL(account)
+ib.sleep(10) # let updates come in (event loop processes messages)
+current_unrealised = pnl_stream.unrealizedPnL
+
+print("")
+print(account)
+print(current_unrealised)
+print("")
+
+singapore_tz = pytz.timezone('Asia/Singapore')
+raw_dt_utc = datetime.datetime.now(datetime.timezone.utc)
+today = pd.Timestamp(raw_dt_utc).tz_convert(singapore_tz).round('h')
+
+new_data = {
+    "date": [today],
+    "nav": [nav_sgd],
+    "unrealised": [current_unrealised]
+}
+
+new_nav_df = pd.DataFrame(new_data)
+
+# File path
+nav_file = "nav.parquet"
+
+# Append if file exists
+if os.path.exists(nav_file):
+    # Load historical data
+    old_df = pd.read_parquet(nav_file)
+    # Concatenate the existing data with the new observation
+    updated_df = pd.concat([old_df, new_nav_df], ignore_index=True)
+else:
+    # If no file exists, this new DF becomes the starting point
+    updated_df = new_nav_df
+    
+updated_df.to_parquet(nav_file, index=False)
 
 # ======== Residual CASH_SGD so ΣMV == NAV ========
 _union_index = sorted(set().union(*[s.index for s in asset_prices_sgd.values()])) or pd.date_range(end=pd.Timestamp.today().normalize(), periods=2, freq='D')
@@ -578,7 +590,6 @@ annualised_vol = daily_vol * np.sqrt(252)
 
 print("Daily vol:", daily_vol)
 print("Annualised vol:", annualised_vol)
-# 1) Daily vol from historical data (USE IT FOR VOL)
 
 class StochasticProcess:
     def __init__(self, drift, vol, delta_t, initial_asset_price):
@@ -620,11 +631,12 @@ frame_5d = [p.asset_price for p in processes_5d]
 frame_21d = [p.asset_price for p in processes_21d]
 
 def compute_var_es(pairs, alpha):
-    # Compute VaR and ES from simulated price paths.
+    """
+    Compute VaR and ES from simulated price paths.
     
-    # pairs: list of [S0, S1, ... Sk] price paths
-    # alpha: quantile level (e.g. 0.01 for 99% confidence)
-
+    pairs: list of [S0, S1, ... Sk] price paths
+    alpha: quantile level (e.g. 0.01 for 99% confidence)
+    """
     arr = np.asarray(pairs, dtype=float)
     pnl = arr[:, -1] - arr[:, 0]   # PnL distribution
 
@@ -669,12 +681,12 @@ hisEs90_21d = 0
 
 # ======== k-day compounded returns ========
 def kday_compounded(returns: pd.Series, k: int) -> pd.Series:
-    # Compounded k-day returns from 1D daily returns series
+    """Compounded k-day returns from 1D daily returns series"""
     return (1 + returns).rolling(k).apply(np.prod, raw=True) - 1
 
 # ======== VaR / ES from returns ========
 def var_es_from_returns(returns: pd.Series, alpha=0, nav_sgd=nav_sgd):
-    # Compute Historical VaR% and ES (absolute) from returns series
+    """Compute Historical VaR% and ES (absolute) from returns series"""
     q = 1 - alpha
     var_pct = np.percentile(returns, 100 * q)  # historical quantile
     es_pct = returns[returns <= var_pct].mean() if any(returns <= var_pct) else var_pct
@@ -727,10 +739,6 @@ print("historical 21dVar90:", hisVar90_21d)
 print("historical 1dEs90:", hisEs90_1d)
 print("historical 5dEs90:", hisEs90_5d)
 print("historical 21dEs90:", hisEs90_21d)
-
-# Example: today's values
-raw_dt = datetime.datetime.now()
-today = pd.Timestamp(raw_dt).round('h')
 
 # Put into a 1-row DataFrame
 new_row = pd.DataFrame([{
@@ -864,11 +872,11 @@ vol_df.to_parquet(vol_file, index=False)
 corr_file = "corr.parquet"
 
 def save_correlation(rets, today, corr_file="corr.parquet", patterns=("CCY_", "CASH_")):
-    
-    #Compute correlation matrix (excluding currencies), flatten it,
-    #and store in a parquet file with date reference.
-    #If today's date already exists, override it. Else append new.
-    
+    """
+    Compute correlation matrix (excluding currencies), flatten it,
+    and store in a parquet file with date reference.
+    If today's date already exists, override it. Else append new.
+    """
     # Drop FX (currencies)
     to_drop = [c for c in rets.columns if any(p in c for p in patterns)]
     rets_no_fx = rets.drop(columns=to_drop)
