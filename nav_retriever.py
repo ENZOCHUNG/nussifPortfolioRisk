@@ -7,6 +7,7 @@ import plotly.graph_objects as go
 import datetime
 import os
 import pytz
+from util import reduce_all_positions_by_pct
 
 util.startLoop()
 ib = IB()
@@ -53,8 +54,9 @@ else:
 max_nav = updated_df['nav'].max()
 current_drawdown = (((max_nav - nav_sgd)/max_nav)*100).round(1)
 
-if current_drawdown > 0.05:
+if current_drawdown > 5:
     print(f"Exceeded 5% from peak: {current_drawdown}")
+    reduce_all_positions_by_pct(ib, pct=0.01)
 else:
     print(f"Within 5% limit: {current_drawdown}")
 
