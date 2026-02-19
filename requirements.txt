@@ -4,3 +4,5 @@ numpy
 plotly
 ib-insync
 pytz
+sqlalchemy
+psycopg2-binary

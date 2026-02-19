@@ -3,14 +3,86 @@ import pandas as pd
 import plotly.express as px
 import datetime as dt
 import plotly.graph_objects as go
+import os
 
 # === Streamlit page config ===
 st.set_page_config(layout="wide")
 
 # ==============================
+# Database connection setup
+# ==============================
+USE_DATABASE = os.getenv("USE_DATABASE", "true").lower() == "true"
+
+@st.cache_resource
+def get_db_module():
+    """Load database module if available."""
+    try:
+        import db
+        if db.test_connection():
+            return db
+    except Exception as e:
+        st.warning(f"Database connection failed: {e}. Falling back to parquet files.")
+    return None
+
+db_module = get_db_module() if USE_DATABASE else None
+
+# ==============================
+# Data loading functions (DB with parquet fallback)
+# ==============================
+@st.cache_data(ttl=60)
+def load_risk_data():
+    """Load global average metrics from database or parquet."""
+    if db_module:
+        try:
+            return db_module.read_global_avg_metric()
+        except Exception as e:
+            st.warning(f"Failed to load risk data from DB: {e}")
+    return pd.read_parquet("global_avg_metric.parquet")
+
+@st.cache_data(ttl=60)
+def load_weights_data():
+    """Load weights from database or parquet."""
+    if db_module:
+        try:
+            return db_module.read_weights()
+        except Exception as e:
+            st.warning(f"Failed to load weights from DB: {e}")
+    return pd.read_parquet("weights.parquet")
+
+@st.cache_data(ttl=60)
+def load_vol_data():
+    """Load volatility from database or parquet."""
+    if db_module:
+        try:
+            return db_module.read_vol()
+        except Exception as e:
+            st.warning(f"Failed to load volatility from DB: {e}")
+    return pd.read_parquet("vol.parquet")
+
+@st.cache_data(ttl=60)
+def load_corr_data():
+    """Load correlation from database or parquet."""
+    if db_module:
+        try:
+            return db_module.read_corr()
+        except Exception as e:
+            st.warning(f"Failed to load correlation from DB: {e}")
+    return pd.read_parquet("corr.parquet")
+
+@st.cache_data(ttl=60)
+def load_pnl_data():
+    """Load PnL from database or parquet."""
+    if db_module:
+        try:
+            return db_module.read_pnl()
+        except Exception as e:
+            st.warning(f"Failed to load PnL from DB: {e}")
+    return pd.read_parquet("pnl.parquet")
+
+# ==============================
 # Load data
 # ==============================
-risk_df = pd.read_parquet("global_avg_metric.parquet")
+risk_df = load_risk_data()
 
 # ==============================
 # Sidebar controls
@@ -98,8 +170,8 @@ elif view_option == "Weights vs Volatility":
     st.title("Portfolio Weights vs Volatility")
 
     # Load weights & vol data
-    weights_df = pd.read_parquet("weights.parquet")
-    vol_df = pd.read_parquet("vol.parquet")
+    weights_df = load_weights_data()
+    vol_df = load_vol_data()
 
     vol_df["volatility"] = vol_df["volatility"] * 100
 
@@ -175,8 +247,7 @@ elif view_option == "Corr":
     raw_dt = dt.datetime.now()
     today = pd.Timestamp(raw_dt).round('h')
 
-    corr_file = "corr.parquet"
-    df_corr = pd.read_parquet(corr_file)
+    df_corr = load_corr_data()
 
     # Normalize date format
     df_corr["date"] = pd.to_datetime(df_corr["date"])
@@ -212,12 +283,11 @@ elif view_option == "PnL":
 
     # --- KPI Summary Row ---
     try:
-        df_pnl = pd.read_parquet("pnl.parquet")
+        df_pnl = load_pnl_data()
         df_pnl["date"] = pd.to_datetime(df_pnl["date"])
-        # Sort by date to ensure lines connect correctly
         df_pnl = df_pnl.sort_values("date")
-    except FileNotFoundError:
-        st.error("pnl.parquet not found. Please run your processor script first.")
+    except Exception as e:
+        st.error(f"Failed to load PnL data: {e}")
         st.stop()
     
     latest = df_pnl.iloc[-1]
@@ -226,16 +296,6 @@ elif view_option == "PnL":
     c2.metric("Total PnL", f"${latest['totalPnL']:,.2f}")
     c3.metric("Realised", f"${latest['realisedPnL']:,.2f}")
     c4.metric("Return", f"{latest['percentage_change']}%")
-    # Load PnL data
-    # Path handles the directory structure we discussed (../app/pnl.parquet)
-    try:
-        df_pnl = pd.read_parquet("pnl.parquet")
-        df_pnl["date"] = pd.to_datetime(df_pnl["date"])
-        # Sort by date to ensure lines connect correctly
-        df_pnl = df_pnl.sort_values("date")
-    except FileNotFoundError:
-        st.error("pnl.parquet not found. Please run your processor script first.")
-        st.stop()
 
     # --- Chart 1: NAV Against Time ---
     st.subheader("1. Net Asset Value (Equity Curve)")
