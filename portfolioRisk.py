@@ -9,14 +9,11 @@ import os
 import pytz
 
 # Database module for AWS RDS PostgreSQL
-try:
-    import db as database
-    USE_DATABASE = database.test_connection()
-    if USE_DATABASE:
-        print("Database connection established - will write to PostgreSQL")
-except ImportError:
-    USE_DATABASE = False
-    print("Database module not found - using parquet files only")
+import db as database
+if database.test_connection():
+    print("Database connection established - will write to PostgreSQL")
+else:
+    print("WARNING: Database connection failed - writes will be attempted but may fail")
 
 # ======== Connection to TWS ========
 util.startLoop()
@@ -551,12 +548,11 @@ else:
 updated_df.to_parquet(nav_file, index=False)
 
 # Write to database
-if USE_DATABASE:
-    try:
-        database.upsert_nav(new_nav_df)
-        print("NAV data written to database")
-    except Exception as e:
-        print(f"Failed to write NAV to database: {e}")
+try:
+    database.upsert_nav(new_nav_df)
+    print("NAV data written to database")
+except Exception as e:
+    print(f"Failed to write NAV to database: {e}")
 
 # ======== Residual CASH_SGD so ΣMV == NAV ========
 _union_index = sorted(set().union(*[s.index for s in asset_prices_sgd.values()])) or pd.date_range(end=pd.Timestamp.today().normalize(), periods=2, freq='D')
@@ -871,12 +867,11 @@ avg_store = avg_store.sort_values("date").reset_index(drop=True)
 avg_store.to_parquet(parquet_file, index=False)
 
 # Write to database
-if USE_DATABASE:
-    try:
-        database.upsert_global_avg_metric(avg_df)
-        print("Global avg metrics written to database")
-    except Exception as e:
-        print(f"Failed to write global_avg_metric to database: {e}")
+try:
+    database.upsert_global_avg_metric(avg_df)
+    print("Global avg metrics written to database")
+except Exception as e:
+    print(f"Failed to write global_avg_metric to database: {e}")
 
 # Add a date column to weights (convert Series → DataFrame)
 weights_df = weights.to_frame("weights").reset_index().rename(columns={"index": "symbol"})
@@ -892,12 +887,11 @@ if os.path.exists(weights_file):
 weights_df.to_parquet(weights_file, index=False)
 
 # Write to database
-if USE_DATABASE:
-    try:
-        database.upsert_weights(weights_df_new)
-        print("Weights data written to database")
-    except Exception as e:
-        print(f"Failed to write weights to database: {e}")
+try:
+    database.upsert_weights(weights_df_new)
+    print("Weights data written to database")
+except Exception as e:
+    print(f"Failed to write weights to database: {e}")
 
 # Compute volatility (std dev of returns)
 vol_std = rets.std()
@@ -919,12 +913,11 @@ if os.path.exists(vol_file):
 vol_df.to_parquet(vol_file, index=False)
 
 # Write to database
-if USE_DATABASE:
-    try:
-        database.upsert_vol(vol_df_new)
-        print("Volatility data written to database")
-    except Exception as e:
-        print(f"Failed to write volatility to database: {e}")
+try:
+    database.upsert_vol(vol_df_new)
+    print("Volatility data written to database")
+except Exception as e:
+    print(f"Failed to write volatility to database: {e}")
 
 # ======= Correlation Matrix ===========
 corr_file = "corr.parquet"
@@ -951,12 +944,11 @@ def save_correlation(rets, today, corr_file="corr.parquet", patterns=("CCY_", "C
     corr_long.to_parquet(corr_file, index=False)
     
     # Write to database
-    if USE_DATABASE:
-        try:
-            database.upsert_corr(corr_long)
-            print("Correlation data written to database")
-        except Exception as e:
-            print(f"Failed to write correlation to database: {e}")
+    try:
+        database.upsert_corr(corr_long)
+        print("Correlation data written to database")
+    except Exception as e:
+        print(f"Failed to write correlation to database: {e}")
     
     return corr_long
 

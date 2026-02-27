@@ -6,3 +6,4 @@ ib-insync
 pytz
 sqlalchemy
 psycopg2-binary
+python-dotenv

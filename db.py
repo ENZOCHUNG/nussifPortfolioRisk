@@ -6,11 +6,18 @@ and perform CRUD operations for portfolio risk data.
 """
 
 import os
+from pathlib import Path
+from urllib.parse import quote_plus
 import pandas as pd
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
 from contextlib import contextmanager
 from typing import Optional
+from dotenv import load_dotenv
+
+# Load .env file from the same directory as this module
+env_path = Path(__file__).parent / ".env"
+load_dotenv(env_path)
 
 DB_CONFIG = {
     "host": os.getenv("AWS_RDS_HOST", "pnl-db.cbukkwwqer7w.ap-southeast-1.rds.amazonaws.com"),
@@ -27,9 +34,11 @@ def get_engine() -> Engine:
     """Get or create SQLAlchemy engine for PostgreSQL connection."""
     global _engine
     if _engine is None:
+        encoded_password = quote_plus(DB_CONFIG['password'])
         connection_string = (
-            f"postgresql://{DB_CONFIG['user']}:{DB_CONFIG['password']}"
+            f"postgresql://{DB_CONFIG['user']}:{encoded_password}"
             f"@{DB_CONFIG['host']}:{DB_CONFIG['port']}/{DB_CONFIG['database']}"
+            f"?sslmode=require"
         )
         _engine = create_engine(connection_string, pool_pre_ping=True)
     return _engine
