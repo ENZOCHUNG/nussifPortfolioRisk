@@ -9,6 +9,16 @@ import os
 import pytz
 from util import reduce_all_positions_by_pct
 
+# Database module for AWS RDS PostgreSQL
+try:
+    import db as database
+    USE_DATABASE = database.test_connection()
+    if USE_DATABASE:
+        print("Database connection established - will write to PostgreSQL")
+except ImportError:
+    USE_DATABASE = False
+    print("Database module not found - using parquet files only")
+
 util.startLoop()
 ib = IB()
 ib.connect('127.0.0.1', 4002, clientId=3)
@@ -61,3 +71,11 @@ else:
     print(f"Within 5% limit: {current_drawdown}")
 
 updated_df.to_parquet(stopLossTracker_file, index=False)
+
+# Write to database
+if USE_DATABASE:
+    try:
+        database.upsert_stop_loss_tracker(new_nav_df)
+        print("Stop loss tracker data written to database")
+    except Exception as e:
+        print(f"Failed to write stop loss tracker to database: {e}")
